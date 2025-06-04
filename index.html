@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Calculadora de Manning</title>
+  <link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Albert Sans', sans-serif;
+      max-width: 700px;
+      margin: 2rem auto;
+      padding: 1.5rem;
+      background: #f0f6fb;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #004c99;
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+      font-weight: 600;
+      color: #003366;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccddee;
+      border-radius: 6px;
+      background: #ffffff;
+    }
+    button {
+      margin-top: 1.5rem;
+      width: 100%;
+      padding: 10px;
+      background: #0077cc;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005fa3;
+    }
+    .resultado {
+      margin-top: 1.5rem;
+      font-size: 1.1rem;
+      background: #e6ffe6;
+      padding: 1rem;
+      border-radius: 5px;
+    }
+    .modo-btn {
+      flex: 1;
+      padding: 10px;
+      background-color: #e0ecf8;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .modo-btn:hover {
+      background-color: #cbe0f6;
+    }
+    .modo-btn.seleccionado {
+      background-color: #0077cc;
+      color: white;
+      border: 1px solid #005fa3;
+    }
+  </style>
+</head>
+<body>
+  <h1>Calculadora de Manning</h1>
+
+  <label>¿Qué desea calcular?</label>
+  <div id="modoSeleccion" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+    <button id="btnDirecto" class="modo-btn seleccionado" onclick="setModo('directo')">Caudal (Q)</button>
+    <button id="btnInverso" class="modo-btn" onclick="setModo('inverso')">Tirante normal (h)</button>
+  </div>
+
+  <label for="tipo">Sección:</label>
+  <select id="tipo" onchange="actualizarFormulario()">
+    <option value="rectangular">Rectangular</option>
+    <option value="trapezoidal">Trapecial</option>
+    <option value="triangular">Triangular</option>
+    <option value="circular">Circular</option>
+  </select>
+
+  <div id="parametrosGeometricos"></div>
+
+  <label for="pendiente">Pendiente (S):</label>
+  <input type="number" id="pendiente" step="0.00001" value="0.001">
+
+  <label for="n">Rugosidad de Manning (n):</label>
+  <input type="number" id="n" step="0.001" value="0.013">
+
+  <div id="entradaAltura">
+    <label for="altura">Altura del flujo (h) [m]:</label>
+    <input type="number" id="altura" step="0.01" value="1.0">
+  </div>
+
+  <div id="entradaCaudal" style="display:none;">
+    <label for="caudalObjetivo">Caudal objetivo Q [m³/s]:</label>
+    <input type="number" id="caudalObjetivo" step="0.01" value="5.0">
+  </div>
+
+  <button onclick="calcular()">Calcular</button>
+
+  <!-- ⚠️ Advertencia personalizada para tirante > diámetro -->
+  <div id="advertenciaTirante" style="color: red; font-weight: bold; margin-top: 1rem; display: none;">
+    El tirante es mayor que el diámetro de la sección. Se recomienda incrementar el diámetro o la pendiente longitudinal “S”
+  </div>
+
+  <!-- Tabla de resultados siempre visible, pero sin datos -->
+  <div class="resultado" id="resultado">
+    <table style="width: 100%; border-collapse: collapse;">
+      <tbody>
+        <tr><td><strong>Tirante normal:</strong></td><td><span id="resH">–</span> m</td></tr>
+        <tr><td><strong>Área hidráulica:</strong></td><td><span id="resA">–</span> m²</td></tr>
+        <tr><td><strong>Perímetro mojado:</strong></td><td><span id="resP">–</span> m</td></tr>
+        <tr><td><strong>Radio hidráulico:</strong></td><td><span id="resR">–</span> m</td></tr>
+        <tr><td><strong>Caudal:</strong></td><td><span id="resQ">–</span> m³/s</td></tr>
+        <tr><td><strong>Velocidad media:</strong></td><td><span id="resV">–</span> m/s</td></tr>
+        <tr><td><strong>Número de Froude Fr:</strong></td><td><span id="resFr">–</span></td></tr>
+        <tr><td><strong>Régimen de flujo:</strong></td><td><span id="resTipoFlujo">–</span></td></tr>
+        <tr><td colspan="2" id="advertencia" style="color:red; font-weight:bold; padding-top: 10px;"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let modoActual = 'directo';
+
+    function actualizarFormulario() {
+      const tipo = document.getElementById('tipo').value;
+      const contenedor = document.getElementById('parametrosGeometricos');
+      contenedor.innerHTML = '';
+
+      if (tipo === 'rectangular') {
+        contenedor.innerHTML += '<label for="base">Base (b) [m]:</label><input type="number" id="base" step="0.01" value="2">';
+      } else if (tipo === 'trapezoidal') {
+        contenedor.innerHTML += '<label for="base">Base inferior (b) [m]:</label><input type="number" id="base" step="0.01" value="2">';
+        contenedor.innerHTML += '<label for="talud">Talud (z) [Hz/V]:</label><input type="number" id="talud" step="0.1" value="1">';
+      } else if (tipo === 'triangular') {
+        contenedor.innerHTML += '<label for="talud">Talud (z) [Hz/V]:</label><input type="number" id="talud" step="0.1" value="1">';
+      } else if (tipo === 'circular') {
+        contenedor.innerHTML += '<label for="diametro">Diámetro (D) [m]:</label><input type="number" id="diametro" step="0.01" value="1">';
+      }
+    }
+
+    function setModo(nuevoModo) {
+      modoActual = nuevoModo;
+      document.getElementById('entradaAltura').style.display = (modoActual === 'directo') ? 'block' : 'none';
+      document.getElementById('entradaCaudal').style.display = (modoActual === 'inverso') ? 'block' : 'none';
+
+      document.getElementById('btnDirecto').classList.toggle('seleccionado', modoActual === 'directo');
+      document.getElementById('btnInverso').classList.toggle('seleccionado', modoActual === 'inverso');
+
+      document.getElementById('advertencia').textContent = '';
+      document.getElementById('advertenciaTirante').style.display = 'none';
+      limpiarResultados();
+    }
+
+    function limpiarResultados() {
+      ['resH', 'resA', 'resP', 'resR', 'resQ', 'resV', 'resFr', 'resTipoFlujo'].forEach(id => {
+        document.getElementById(id).textContent = '–';
+      });
+      document.getElementById('resV').style.color = 'black';
+    }
+
+    function calcular() {
+      const tipo = document.getElementById('tipo').value;
+      const S = parseFloat(document.getElementById('pendiente').value);
+      const n = parseFloat(document.getElementById('n').value);
+      let h, Q, A, P, R, V, Fr;
+
+      document.getElementById('advertencia').textContent = '';
+      document.getElementById('advertenciaTirante').style.display = 'none';
+      limpiarResultados();
+
+      if (modoActual === 'inverso') {
+        const Qobjetivo = parseFloat(document.getElementById('caudalObjetivo').value);
+        if (isNaN(Qobjetivo) || Qobjetivo <= 0) {
+          alert("Ingrese un caudal válido mayor a 0.");
+          return;
+        }
+
+        let hMin = 0.0001, hMax = 10, hMid;
+        for (let i = 0; i < 30; i++) {
+          hMid = (hMin + hMax) / 2;
+          const Qcalc = calcularQ(tipo, hMid, S, n);
+          if (Qcalc < Qobjetivo) hMin = hMid;
+          else hMax = hMid;
+        }
+        h = hMid;
+      } else {
+        h = parseFloat(document.getElementById('altura').value);
+        if (isNaN(h) || h <= 0) {
+          alert("Ingrese una altura válida mayor a 0.");
+          return;
+        }
+      }
+
+      // Validación especial para sección circular
+      if (tipo === 'circular') {
+        const D = parseFloat(document.getElementById('diametro').value || 0);
+        if (h > D) {
+          document.getElementById('advertenciaTirante').style.display = 'block';
+          return;
+        }
+      }
+
+      A = calcularA(tipo, h);
+      P = calcularP(tipo, h);
+      R = A / P;
+      Q = calcularQ(tipo, h, S, n);
+      V = Q / A;
+      Fr = V / Math.sqrt(9.81 * R);
+
+      document.getElementById('resH').textContent = h.toFixed(2);
+      document.getElementById('resA').textContent = A.toFixed(2);
+      document.getElementById('resP').textContent = P.toFixed(2);
+      document.getElementById('resR').textContent = R.toFixed(2);
+      document.getElementById('resQ').textContent = Q.toFixed(2);
+      document.getElementById('resV').textContent = V.toFixed(2);
+      document.getElementById('resFr').textContent = Fr.toFixed(2);
+      document.getElementById('resTipoFlujo').textContent = Fr < 1 ? "Subcrítico" : (Fr === 1 ? "Crítico" : "Supercrítico");
+
+      if (V > 0.9) {
+        document.getElementById('resV').style.color = 'red';
+        document.getElementById('advertencia').textContent = 'Posible velocidad erosiva en canales sin revestir';
+      }
+    }
+
+    function calcularA(tipo, h) {
+      const b = parseFloat(document.getElementById('base')?.value || 0);
+      const z = parseFloat(document.getElementById('talud')?.value || 0);
+      const D = parseFloat(document.getElementById('diametro')?.value || 0);
+      if (tipo === 'rectangular') return b * h;
+      if (tipo === 'trapezoidal') return (b + z * h) * h;
+      if (tipo === 'triangular') return z * h * h;
+      if (tipo === 'circular') {
+        const r = D / 2;
+        const theta = 2 * Math.acos((r - h) / r);
+        return (r * r / 2) * (theta - Math.sin(theta));
+      }
+      return 0;
+    }
+
+    function calcularP(tipo, h) {
+      const b = parseFloat(document.getElementById('base')?.value || 0);
+      const z = parseFloat(document.getElementById('talud')?.value || 0);
+      const D = parseFloat(document.getElementById('diametro')?.value || 0);
+      if (tipo === 'rectangular') return b + 2 * h;
+      if (tipo === 'trapezoidal') return b + 2 * h * Math.sqrt(1 + z * z);
+      if (tipo === 'triangular') return 2 * h * Math.sqrt(1 + z * z);
+      if (tipo === 'circular') {
+        const r = D / 2;
+        const theta = 2 * Math.acos((r - h) / r);
+        return r * theta;
+      }
+      return 0;
+    }
+
+    function calcularQ(tipo, h, S, n) {
+      const A = calcularA(tipo, h);
+      const P = calcularP(tipo, h);
+      const R = A / P;
+      return (1 / n) * A * Math.pow(R, 2 / 3) * Math.sqrt(S);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      actualizarFormulario();
+      setModo('directo');
+    });
+  </script>
+</body>
+</html>
